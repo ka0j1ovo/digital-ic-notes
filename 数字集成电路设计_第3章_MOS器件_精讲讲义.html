@@ -174,6 +174,7 @@ li{margin:3px 0}
 </script>
 
 
+
 <style id="fx-tools-style">
 /* 阅读工具样式：搜索 / 标注 / 工具按钮组 */
 .fx-tools{position:fixed;right:26px;bottom:26px;z-index:70;display:flex;
@@ -396,6 +397,84 @@ li{margin:3px 0}
     if (sel) sel.removeAllRanges();
   }
 
+  /* ---------- 导出 / 导入 ---------- */
+  function curFile() {
+    var n = location.pathname.split('/').pop() || 'notes';
+    try { n = decodeURIComponent(n); } catch (e) { }
+    return n;
+  }
+  function exportAnn() {
+    if (!store.length) { toast('还没有标注可导出'); return; }
+    var flat = MAIN.textContent;
+    var data = {
+      v: 1,
+      file: curFile(),
+      len: flat.length,
+      time: new Date().toISOString(),
+      anns: store.map(function (a) {
+        return [a[0], a[1], flat.slice(a[0], a[1]).slice(0, 120)];
+      })
+    };
+    var blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '标注_' + curFile().replace(/\.html?$/i, '') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    toast('已导出 ' + store.length + ' 处标注（JSON 文件）');
+  }
+  function importAnn(file) {
+    var fr = new FileReader();
+    fr.onload = function () {
+      var d;
+      try { d = JSON.parse(fr.result); } catch (e) { toast('导入失败：不是有效的 JSON'); return; }
+      var list = Array.isArray(d) ? d : (d && d.anns);
+      if (!Array.isArray(list)) { toast('导入失败：格式不正确'); return; }
+      if (d && d.file && d.file !== curFile()) {
+        if (!window.confirm('这份标注来自《' + d.file + '》，\n当前打开的是《' + curFile() + '》。\n仍要导入到当前章节吗？')) return;
+      }
+      var flat = MAIN.textContent, curLen = flat.length;
+      var srcLen = (d && typeof d.len === 'number') ? d.len : curLen;
+      var add = [], same = 0, moved = 0, skip = 0;
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        if (!it) { skip++; continue; }
+        var s0 = it[0], e0 = it[1];
+        if (typeof s0 !== 'number' || typeof e0 !== 'number' || e0 <= s0) { skip++; continue; }
+        if (srcLen === curLen && e0 <= curLen) { add.push([s0, e0]); same++; continue; }
+        var snip = typeof it[2] === 'string' ? it[2] : '';
+        var placed = false;
+        if (snip.length >= 4) {
+          var win = 3000, from = Math.max(0, s0 - win), to = Math.min(curLen, e0 + win);
+          var seg = flat.slice(from, to), k = seg.indexOf(snip);
+          if (k >= 0 && seg.indexOf(snip, k + 1) < 0) {
+            add.push([from + k, from + k + (e0 - s0)]); moved++; placed = true;
+          }
+          if (!placed) {
+            var k2 = flat.indexOf(snip);
+            if (k2 >= 0 && flat.indexOf(snip, k2 + 1) < 0) {
+              add.push([k2, k2 + (e0 - s0)]); moved++; placed = true;
+            }
+          }
+        }
+        if (!placed) skip++;
+      }
+      for (var j = 0; j < add.length; j++) {
+        var a = add[j];
+        store = store.filter(function (b) { return b[1] <= a[0] || b[0] >= a[1]; });
+        store.push(a);
+      }
+      store.sort(function (a, b) { return a[0] - b[0]; });
+      save();
+      renderAnn();
+      toast('导入 ' + same + ' 处' + (moved ? '，重定位 ' + moved + ' 处' : '') + (skip ? '，跳过 ' + skip + ' 处' : '') + '（共 ' + store.length + ' 处）');
+    };
+    fr.readAsText(file);
+  }
+
   /* ---------- UI ---------- */
   function el(tag, cls, txt) {
     var e = document.createElement(tag);
@@ -451,9 +530,19 @@ li{margin:3px 0}
   var hint = el('div', 'fx-hint', '选“高亮”后，在正文里长按或拖动选中文字，即变黄标注；选“擦除”后选中已标注的文字即可去掉；再点 ✏️ 按钮退出标注模式。');
   var annCount = el('div', 'fx-count', '');
   var clearAll = el('button', 'fx-mini', '清除全部标注');
-  clearAll.type = 'button';
+  var expB = el('button', 'fx-mini', '导出标注');
+  var impB = el('button', 'fx-mini', '导入标注');
+  clearAll.type = expB.type = impB.type = 'button';
+  expB.title = '把本页标注存成 JSON 文件（可备份/换设备）';
+  impB.title = '从 JSON 文件恢复标注';
+  var ioBar = el('div', 'fx-bar');
+  ioBar.appendChild(expB); ioBar.appendChild(impB); ioBar.appendChild(clearAll);
+  var fileIn = document.createElement('input');
+  fileIn.type = 'file';
+  fileIn.accept = '.json,application/json';
+  fileIn.hidden = true;
   aPanel.appendChild(aBar); aPanel.appendChild(annCount); aPanel.appendChild(hint);
-  aPanel.appendChild(clearAll);
+  aPanel.appendChild(ioBar); aPanel.appendChild(fileIn);
   document.body.appendChild(aPanel);
 
   var toastEl = el('div', 'fx-toast');
@@ -499,6 +588,11 @@ li{margin:3px 0}
   hiB.addEventListener('click', function () { setMode('hi'); });
   erB.addEventListener('click', function () { setMode('er'); });
   exB.addEventListener('click', function () { setMode(null); });
+  expB.addEventListener('click', exportAnn);
+  impB.addEventListener('click', function () { fileIn.value = ''; fileIn.click(); });
+  fileIn.addEventListener('change', function () {
+    if (fileIn.files && fileIn.files[0]) importAnn(fileIn.files[0]);
+  });
   clearAll.addEventListener('click', function () {
     if (!store.length) { toast('还没有标注'); return; }
     if (window.confirm('确定清除全部 ' + store.length + ' 处标注？')) {
