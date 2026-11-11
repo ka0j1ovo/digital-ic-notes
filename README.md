@@ -37,3 +37,9 @@ python -m http.server 8000
 
 - 本仓库只放整理后的 HTML 讲义；原始 PPT/PDF 与 Word 源文件不在此仓库。
 - 内容依据课堂 PPT 整理，并参考《CMOS 数字集成电路设计》（Hawkins 等）；如与课堂讲述不一致，以任课教师要求为准。
+
+## 在线浏览
+
+GitHub Pages：<https://ka0j1ovo.github.io/digital-ic-notes/>
+
+仓库：<https://github.com/ka0j1ovo/digital-ic-notes>
