@@ -175,6 +175,7 @@ li{margin:3px 0}
 
 
 
+
 <style id="fx-tools-style">
 /* 阅读工具样式：搜索 / 标注 / 工具按钮组 */
 .fx-tools{position:fixed;right:26px;bottom:26px;z-index:70;display:flex;
@@ -238,7 +239,7 @@ li{margin:3px 0}
   if (window.__fxTools) return;
   window.__fxTools = 1;
 
-  var MAIN = document.querySelector('main') || document.body;
+  var MAIN = document.querySelector('main') || document.querySelector('.wrap') || document.body;
   var KEY = 'fx_ann:' + location.pathname;
   var store = load();
   var mode = null;          // null | 'hi' | 'er'
