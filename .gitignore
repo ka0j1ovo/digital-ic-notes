@@ -1,0 +1,7 @@
+﻿# 源文件不上传
+*.pdf
+*.docx
+_build/
+.DS_Store
+Thumbs.db
+desktop.ini
